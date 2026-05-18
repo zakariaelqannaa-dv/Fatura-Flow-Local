@@ -5,7 +5,6 @@ import { useInvoiceStore } from '@/store/useInvoiceStore'
 import { STATUS_OPTIONS } from '@/constants'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Select,
   SelectContent,
@@ -29,15 +28,22 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { MacWindow } from '@/components/layout/MacWindow'
+import { StatsCard } from '@/components/invoice/StatsCard'
+import { DollarSign, Receipt, Clock, TrendingUp } from 'lucide-react'
 
 type SortField = 'invoiceNumber' | 'client' | 'createdAt' | 'total' | 'status'
 type SortDir = 'asc' | 'desc'
 
-const statusColors: Record<InvoiceStatus, string> = {
-  draft: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
-  sent: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
-  paid: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
-  cancelled: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
+const statusStyles: Record<InvoiceStatus, string> = {
+  draft:
+    'bg-yellow-500/10 text-yellow-300 border-yellow-500/20 shadow-[0_0_12px_rgba(234,179,8,0.12)]',
+  sent:
+    'bg-blue-500/10 text-blue-300 border-blue-500/20 shadow-[0_0_12px_rgba(59,130,246,0.12)]',
+  paid:
+    'bg-green-500/10 text-green-300 border-green-500/20 shadow-[0_0_12px_rgba(34,197,94,0.12)]',
+  cancelled:
+    'bg-white/5 text-white/40 border-white/10',
 }
 
 function formatDate(iso: string): string {
@@ -60,6 +66,14 @@ function formatCurrency(amount: number, currency: Currency): string {
     GBP: '£',
   }
   return `${symbols[currency] ?? currency} ${amount.toFixed(2)}`
+}
+
+function formatShortCurrency(amount: number, currency: Currency): string {
+  const sym: Record<string, string> = { TRY: '₺', USD: '$', EUR: '€', GBP: '£' }
+  const s = sym[currency] ?? currency
+  if (amount >= 1_000_000) return `${s} ${(amount / 1_000_000).toFixed(1)}M`
+  if (amount >= 1_000) return `${s} ${(amount / 1_000).toFixed(1)}K`
+  return `${s} ${amount.toFixed(0)}`
 }
 
 export function InvoiceDashboard() {
@@ -171,24 +185,95 @@ export function InvoiceDashboard() {
     [importData],
   )
 
+  const totalRevenue = useMemo(() => {
+    let sum = 0
+    for (const inv of invoices) {
+      sum += calculateTotals(inv.lineItems, inv.taxRate).total
+    }
+    return sum
+  }, [invoices])
+
+  const paidRevenue = useMemo(() => {
+    let sum = 0
+    for (const inv of invoices) {
+      if (inv.status === 'paid') {
+        sum += calculateTotals(inv.lineItems, inv.taxRate).total
+      }
+    }
+    return sum
+  }, [invoices])
+
+  const draftCount = useMemo(
+    () => invoices.filter((i) => i.status === 'draft').length,
+    [invoices],
+  )
+
+  const primaryCurrency: Currency =
+    invoices.length > 0 ? invoices[0]!.currency : 'TRY'
+
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Invoices</CardTitle>
+    <div className="mx-auto max-w-6xl space-y-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <StatsCard
+          icon={DollarSign}
+          label="Total Revenue"
+          value={formatShortCurrency(totalRevenue, primaryCurrency)}
+          accent="blue"
+        />
+        <StatsCard
+          icon={Receipt}
+          label="Total Invoices"
+          value={String(invoices.length)}
+          accent="purple"
+        />
+        <StatsCard
+          icon={TrendingUp}
+          label="Paid"
+          value={formatShortCurrency(paidRevenue, primaryCurrency)}
+          accent="green"
+        />
+        <StatsCard
+          icon={Clock}
+          label="Drafts"
+          value={String(draftCount)}
+          accent="yellow"
+        />
+      </div>
+
+      <MacWindow title="Fatura Flow — Invoices">
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <Input
+                placeholder="Search by invoice # or client..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="max-w-xs"
+              />
+              <Select value={statusFilter} onValueChange={(val) => val && setStatusFilter(val)}>
+                <SelectTrigger className="w-36">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  {STATUS_OPTIONS.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s.charAt(0).toUpperCase() + s.slice(1)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" onClick={handleExport}>
-                Export Data
+                Export
               </Button>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => fileInputRef.current?.click()}
               >
-                Import Data
+                Import
               </Button>
               <input
                 ref={fileInputRef}
@@ -202,41 +287,19 @@ export function InvoiceDashboard() {
               </Button>
             </div>
           </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center gap-3">
-            <Input
-              placeholder="Search by invoice # or client..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="max-w-xs"
-            />
-            <Select value={statusFilter} onValueChange={(val) => val && setStatusFilter(val)}>
-              <SelectTrigger className="w-36">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                {STATUS_OPTIONS.map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {s.charAt(0).toUpperCase() + s.slice(1)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-sm text-muted-foreground ml-auto">
-              {filtered.length} of {invoices.length} invoice{invoices.length !== 1 ? 's' : ''}
-            </p>
-          </div>
+
+          <p className="text-xs text-white/30">
+            {filtered.length} of {invoices.length} invoice{invoices.length !== 1 ? 's' : ''}
+          </p>
 
           {filtered.length === 0 ? (
-            <p className="text-center text-muted-foreground py-12">
+            <p className="py-12 text-center text-white/40">
               {invoices.length === 0
                 ? 'No invoices yet. Create your first invoice!'
                 : 'No invoices match your filters.'}
             </p>
           ) : (
-            <div className="rounded-lg border">
+            <div className="overflow-hidden rounded-[14px] border border-white/10">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -246,7 +309,7 @@ export function InvoiceDashboard() {
                     >
                       Invoice #
                       {sortField === 'invoiceNumber' && (
-                        <span className="ml-1">{sortDir === 'asc' ? '▲' : '▼'}</span>
+                        <span className="ml-1 text-white/40">{sortDir === 'asc' ? '▲' : '▼'}</span>
                       )}
                     </TableHead>
                     <TableHead
@@ -255,7 +318,7 @@ export function InvoiceDashboard() {
                     >
                       Client
                       {sortField === 'client' && (
-                        <span className="ml-1">{sortDir === 'asc' ? '▲' : '▼'}</span>
+                        <span className="ml-1 text-white/40">{sortDir === 'asc' ? '▲' : '▼'}</span>
                       )}
                     </TableHead>
                     <TableHead
@@ -264,7 +327,7 @@ export function InvoiceDashboard() {
                     >
                       Date
                       {sortField === 'createdAt' && (
-                        <span className="ml-1">{sortDir === 'asc' ? '▲' : '▼'}</span>
+                        <span className="ml-1 text-white/40">{sortDir === 'asc' ? '▲' : '▼'}</span>
                       )}
                     </TableHead>
                     <TableHead
@@ -273,7 +336,7 @@ export function InvoiceDashboard() {
                     >
                       Total
                       {sortField === 'total' && (
-                        <span className="ml-1">{sortDir === 'asc' ? '▲' : '▼'}</span>
+                        <span className="ml-1 text-white/40">{sortDir === 'asc' ? '▲' : '▼'}</span>
                       )}
                     </TableHead>
                     <TableHead
@@ -282,7 +345,7 @@ export function InvoiceDashboard() {
                     >
                       Status
                       {sortField === 'status' && (
-                        <span className="ml-1">{sortDir === 'asc' ? '▲' : '▼'}</span>
+                        <span className="ml-1 text-white/40">{sortDir === 'asc' ? '▲' : '▼'}</span>
                       )}
                     </TableHead>
                     <TableHead className="w-24">Actions</TableHead>
@@ -293,19 +356,19 @@ export function InvoiceDashboard() {
                     const totals = calculateTotals(inv.lineItems, inv.taxRate)
                     return (
                       <TableRow key={inv.id}>
-                        <TableCell className="font-medium">
+                        <TableCell className="font-medium text-white/85">
                           {inv.invoiceNumber}
                         </TableCell>
                         <TableCell>{inv.client.name || '—'}</TableCell>
-                        <TableCell className="text-muted-foreground">
+                        <TableCell className="text-white/45">
                           {formatDate(inv.createdAt)}
                         </TableCell>
-                        <TableCell className="text-right font-medium">
+                        <TableCell className="text-right font-medium text-white/85">
                           {formatCurrency(totals.total, inv.currency)}
                         </TableCell>
                         <TableCell>
                           <span
-                            className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${statusColors[inv.status]}`}
+                            className={`glass-badge inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${statusStyles[inv.status]}`}
                           >
                             {inv.status.charAt(0).toUpperCase() + inv.status.slice(1)}
                           </span>
@@ -335,8 +398,8 @@ export function InvoiceDashboard() {
               </Table>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </MacWindow>
 
       <Dialog open={deleteId !== null} onOpenChange={(open) => !open && setDeleteId(null)}>
         <DialogContent>

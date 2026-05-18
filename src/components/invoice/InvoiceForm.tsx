@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import type { Invoice, LineItem } from '@/types/invoice'
 import { calculateTotals } from '@/types/invoice'
 import { useInvoiceStore } from '@/store/useInvoiceStore'
@@ -15,6 +15,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import { MacWindow } from '@/components/layout/MacWindow'
+import { InvoicePreview } from '@/components/invoice/InvoicePreview'
+import { generateInvoicePdf } from '@/lib/pdf'
 
 function LineItemRow({
   item,
@@ -70,7 +81,7 @@ function LineItemRow({
           onChange={(e) => onUpdate(index, 'unitPrice', Number(e.target.value))}
         />
       </div>
-      <div className="flex items-center h-8 text-sm text-muted-foreground pt-1">
+      <div className="flex items-center h-8 text-sm text-white/50 pt-1">
         {rowTotal.toFixed(2)}
       </div>
       <Button
@@ -91,6 +102,9 @@ export function InvoiceForm() {
   const saveCurrentInvoice = useInvoiceStore((s) => s.saveCurrentInvoice)
   const createNewInvoice = useInvoiceStore((s) => s.createNewInvoice)
   const setCurrentInvoice = useInvoiceStore((s) => s.setCurrentInvoice)
+
+  const pdfPreviewRef = useRef<HTMLDivElement>(null)
+  const [showPdfPreview, setShowPdfPreview] = useState(false)
 
   if (!currentInvoice) return null
 
@@ -163,255 +177,285 @@ export function InvoiceForm() {
     setCurrentInvoice(null)
   }, [setCurrentInvoice])
 
+  const handleDownloadPdf = useCallback(async () => {
+    if (!pdfPreviewRef.current) return
+    await generateInvoicePdf(pdfPreviewRef.current, {
+      filename: `${currentInvoice.invoiceNumber || 'invoice'}.pdf`,
+    })
+  }, [currentInvoice.invoiceNumber])
+
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">
-          {currentInvoice.invoiceNumber || 'New Invoice'}
-        </h2>
-      </div>
+    <div className="mx-auto max-w-4xl">
+      <MacWindow
+        title={`Fatura Flow — ${currentInvoice.invoiceNumber || 'New Invoice'}`}
+      >
+        <div className="space-y-5">
+          <Card>
+            <CardHeader>
+              <CardTitle>Invoice Details</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-3 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="status">Status</Label>
+                <Select
+                  value={currentInvoice.status}
+                  onValueChange={(val) =>
+                    val && handleFieldUpdate('status', val as Invoice['status'])
+                  }
+                >
+                  <SelectTrigger id="status">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {STATUS_OPTIONS.map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {s.charAt(0).toUpperCase() + s.slice(1)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="currency">Currency</Label>
+                <Select
+                  value={currentInvoice.currency}
+                  onValueChange={(val) =>
+                    val && handleFieldUpdate('currency', val as Invoice['currency'])
+                  }
+                >
+                  <SelectTrigger id="currency">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CURRENCY_OPTIONS.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {c}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="dueDate">Due Date</Label>
+                <Input
+                  id="dueDate"
+                  type="date"
+                  value={currentInvoice.dueDate.split('T')[0] ?? ''}
+                  onChange={(e) =>
+                    handleFieldUpdate('dueDate', new Date(e.target.value).toISOString())
+                  }
+                />
+              </div>
+            </CardContent>
+          </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Invoice Details</CardTitle>
-        </CardHeader>
-        <CardContent className="grid grid-cols-3 gap-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="status">Status</Label>
-            <Select
-              value={currentInvoice.status}
-              onValueChange={(val) =>
-                val && handleFieldUpdate('status', val as Invoice['status'])
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {STATUS_OPTIONS.map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {s.charAt(0).toUpperCase() + s.slice(1)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="currency">Currency</Label>
-            <Select
-              value={currentInvoice.currency}
-              onValueChange={(val) =>
-                val && handleFieldUpdate('currency', val as Invoice['currency'])
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {CURRENCY_OPTIONS.map((c) => (
-                  <SelectItem key={c} value={c}>
-                    {c}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="dueDate">Due Date</Label>
-            <Input
-              id="dueDate"
-              type="date"
-              value={currentInvoice.dueDate.split('T')[0] ?? ''}
-              onChange={(e) =>
-                handleFieldUpdate('dueDate', new Date(e.target.value).toISOString())
-              }
-            />
-          </div>
-        </CardContent>
-      </Card>
+          <div className="grid grid-cols-2 gap-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>From (You)</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="sender-name">Name</Label>
+                  <Input
+                    id="sender-name"
+                    value={currentInvoice.sender.name}
+                    onChange={(e) => handleSenderUpdate('name', e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="sender-email">Email</Label>
+                  <Input
+                    id="sender-email"
+                    type="email"
+                    value={currentInvoice.sender.email ?? ''}
+                    onChange={(e) => handleSenderUpdate('email', e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="sender-phone">Phone</Label>
+                  <Input
+                    id="sender-phone"
+                    value={currentInvoice.sender.phone ?? ''}
+                    onChange={(e) => handleSenderUpdate('phone', e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="sender-address">Address</Label>
+                  <Textarea
+                    id="sender-address"
+                    value={currentInvoice.sender.address ?? ''}
+                    onChange={(e) => handleSenderUpdate('address', e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="sender-taxId">Tax ID</Label>
+                  <Input
+                    id="sender-taxId"
+                    value={currentInvoice.sender.taxId ?? ''}
+                    onChange={(e) => handleSenderUpdate('taxId', e.target.value)}
+                  />
+                </div>
+              </CardContent>
+            </Card>
 
-      <div className="grid grid-cols-2 gap-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>From (You)</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="sender-name">Name *</Label>
-              <Input
-                id="sender-name"
-                value={currentInvoice.sender.name}
-                onChange={(e) => handleSenderUpdate('name', e.target.value)}
-              />
+            <Card>
+              <CardHeader>
+                <CardTitle>Bill To</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="client-name">Name</Label>
+                  <Input
+                    id="client-name"
+                    value={currentInvoice.client.name}
+                    onChange={(e) => handleClientUpdate('name', e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="client-email">Email</Label>
+                  <Input
+                    id="client-email"
+                    type="email"
+                    value={currentInvoice.client.email ?? ''}
+                    onChange={(e) => handleClientUpdate('email', e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="client-phone">Phone</Label>
+                  <Input
+                    id="client-phone"
+                    value={currentInvoice.client.phone ?? ''}
+                    onChange={(e) => handleClientUpdate('phone', e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="client-address">Address</Label>
+                  <Textarea
+                    id="client-address"
+                    value={currentInvoice.client.address ?? ''}
+                    onChange={(e) => handleClientUpdate('address', e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="client-taxId">Tax ID</Label>
+                  <Input
+                    id="client-taxId"
+                    value={currentInvoice.client.taxId ?? ''}
+                    onChange={(e) => handleClientUpdate('taxId', e.target.value)}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Line Items</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid grid-cols-[1fr_80px_100px_100px_36px] gap-2 text-xs font-medium text-white/40 px-1">
+                <span>Description</span>
+                <span>Qty</span>
+                <span>Price</span>
+                <span>Total</span>
+                <span />
+              </div>
+              {currentInvoice.lineItems.map((item, index) => (
+                <LineItemRow
+                  key={item.id}
+                  item={item}
+                  index={index}
+                  onUpdate={handleLineItemUpdate}
+                  onRemove={removeLineItem}
+                />
+              ))}
+              <Button variant="outline" size="sm" onClick={addLineItem}>
+                + Add Item
+              </Button>
+            </CardContent>
+          </Card>
+
+          <div className="flex justify-end">
+            <div className="w-64 space-y-1 text-sm">
+              <div className="flex justify-between">
+                <span className="text-white/50">Subtotal</span>
+                <span className="text-white/70">{totals.subtotal.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between items-center gap-2">
+                <span className="text-white/50">Tax</span>
+                <div className="flex items-center gap-1">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={0.1}
+                    className="w-16 h-6 text-xs text-right"
+                    value={currentInvoice.taxRate}
+                    onChange={(e) =>
+                      handleFieldUpdate('taxRate', Number(e.target.value))
+                    }
+                  />
+                  <span className="text-white/50">%</span>
+                </div>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-white/50">Tax Amount</span>
+                <span className="text-white/70">{totals.taxAmount.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between font-semibold text-base pt-1 border-t border-white/10">
+                <span className="text-white/80">Total</span>
+                <span className="text-white/90">
+                  {currentInvoice.currency} {totals.total.toFixed(2)}
+                </span>
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="sender-email">Email</Label>
-              <Input
-                id="sender-email"
-                type="email"
-                value={currentInvoice.sender.email ?? ''}
-                onChange={(e) => handleSenderUpdate('email', e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="sender-phone">Phone</Label>
-              <Input
-                id="sender-phone"
-                value={currentInvoice.sender.phone ?? ''}
-                onChange={(e) => handleSenderUpdate('phone', e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="sender-address">Address</Label>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Notes</CardTitle>
+            </CardHeader>
+            <CardContent>
               <Textarea
-                id="sender-address"
-                value={currentInvoice.sender.address ?? ''}
-                onChange={(e) => handleSenderUpdate('address', e.target.value)}
+                placeholder="Payment terms, additional notes..."
+                value={currentInvoice.notes ?? ''}
+                onChange={(e) => handleFieldUpdate('notes', e.target.value)}
               />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="sender-taxId">Tax ID</Label>
-              <Input
-                id="sender-taxId"
-                value={currentInvoice.sender.taxId ?? ''}
-                onChange={(e) => handleSenderUpdate('taxId', e.target.value)}
-              />
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Bill To</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="client-name">Name *</Label>
-              <Input
-                id="client-name"
-                value={currentInvoice.client.name}
-                onChange={(e) => handleClientUpdate('name', e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="client-email">Email</Label>
-              <Input
-                id="client-email"
-                type="email"
-                value={currentInvoice.client.email ?? ''}
-                onChange={(e) => handleClientUpdate('email', e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="client-phone">Phone</Label>
-              <Input
-                id="client-phone"
-                value={currentInvoice.client.phone ?? ''}
-                onChange={(e) => handleClientUpdate('phone', e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="client-address">Address</Label>
-              <Textarea
-                id="client-address"
-                value={currentInvoice.client.address ?? ''}
-                onChange={(e) => handleClientUpdate('address', e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="client-taxId">Tax ID</Label>
-              <Input
-                id="client-taxId"
-                value={currentInvoice.client.taxId ?? ''}
-                onChange={(e) => handleClientUpdate('taxId', e.target.value)}
-              />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Line Items</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid grid-cols-[1fr_80px_100px_100px_36px] gap-2 text-xs font-medium text-muted-foreground px-1">
-            <span>Description</span>
-            <span>Qty</span>
-            <span>Price</span>
-            <span>Total</span>
-            <span />
-          </div>
-          {currentInvoice.lineItems.map((item, index) => (
-            <LineItemRow
-              key={item.id}
-              item={item}
-              index={index}
-              onUpdate={handleLineItemUpdate}
-              onRemove={removeLineItem}
-            />
-          ))}
-          <Button variant="outline" size="sm" onClick={addLineItem}>
-            + Add Item
-          </Button>
-        </CardContent>
-      </Card>
-
-      <div className="flex justify-end">
-        <div className="w-64 space-y-1 text-sm">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Subtotal</span>
-            <span>{totals.subtotal.toFixed(2)}</span>
-          </div>
-          <div className="flex justify-between items-center gap-2">
-            <span className="text-muted-foreground">Tax</span>
-            <div className="flex items-center gap-1">
-              <Input
-                type="number"
-                min={0}
-                max={100}
-                step={0.1}
-                className="w-16 h-6 text-xs text-right"
-                value={currentInvoice.taxRate}
-                onChange={(e) =>
-                  handleFieldUpdate('taxRate', Number(e.target.value))
-                }
-              />
-              <span className="text-muted-foreground">%</span>
-            </div>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Tax Amount</span>
-            <span>{totals.taxAmount.toFixed(2)}</span>
-          </div>
-          <div className="flex justify-between font-semibold text-base pt-1 border-t">
-            <span>Total</span>
-            <span>
-              {currentInvoice.currency} {totals.total.toFixed(2)}
-            </span>
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" onClick={handleCancel}>
+              Cancel
+            </Button>
+            <Button variant="outline" onClick={() => setShowPdfPreview(true)}>
+              PDF Preview
+            </Button>
+            <Button onClick={handleSave}>Save Invoice</Button>
           </div>
         </div>
-      </div>
+      </MacWindow>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Notes</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Textarea
-            placeholder="Payment terms, additional notes..."
-            value={currentInvoice.notes ?? ''}
-            onChange={(e) => handleFieldUpdate('notes', e.target.value)}
-          />
-        </CardContent>
-      </Card>
-
-      <div className="flex gap-2 justify-end">
-        <Button variant="outline" onClick={handleCancel}>
-          Cancel
-        </Button>
-        <Button onClick={handleSave}>Save Invoice</Button>
-      </div>
+      <Dialog open={showPdfPreview} onOpenChange={setShowPdfPreview}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Invoice Preview</DialogTitle>
+            <DialogDescription>
+              Preview your invoice before downloading.
+            </DialogDescription>
+          </DialogHeader>
+          <div ref={pdfPreviewRef}>
+            <InvoicePreview invoice={currentInvoice} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowPdfPreview(false)}>
+              Close
+            </Button>
+            <Button onClick={handleDownloadPdf}>Download PDF</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
