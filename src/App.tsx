@@ -1,17 +1,19 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useInvoiceStore } from '@/store/useInvoiceStore'
+import { useThemeStore } from '@/store/useThemeStore'
 import { InvoiceForm } from '@/components/invoice/InvoiceForm'
 import { InvoiceDashboard } from '@/components/invoice/InvoiceDashboard'
 import { DashboardView } from '@/components/invoice/DashboardView'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { MacWindow } from '@/components/layout/MacWindow'
 import { Button } from '@/components/ui/button'
-import { Download, Upload } from 'lucide-react'
+import { Download, Upload, Info, Moon, Sun, Monitor } from 'lucide-react'
 
 function SettingsView() {
   const exportData = useInvoiceStore((s) => s.exportData)
   const importData = useInvoiceStore((s) => s.importData)
-  const invoices = useInvoiceStore((s) => s.invoices)
+  const invoices   = useInvoiceStore((s) => s.invoices)
+  const themeState = useThemeStore()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleExport = useCallback(() => {
@@ -34,9 +36,7 @@ function SettingsView() {
         const text = ev.target?.result
         if (typeof text === 'string') {
           const result = importData(text)
-          if (!result.success) {
-            alert(`Import failed: ${result.error ?? 'Unknown error'}`)
-          }
+          if (!result.success) alert(`Import failed: ${result.error ?? 'Unknown error'}`)
         }
       }
       reader.readAsText(file)
@@ -45,56 +45,118 @@ function SettingsView() {
     [importData],
   )
 
+  const Row = ({
+    title,
+    description,
+    action,
+  }: {
+    title: string
+    description: string
+    action: React.ReactNode
+  }) => (
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-[20px] border border-white/[0.08] bg-white/[0.025] px-5 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]">
+      <div>
+        <p className="text-sm font-medium text-foreground/80">{title}</p>
+        <p className="text-xs text-foreground/40 mt-0.5">{description}</p>
+      </div>
+      {action}
+    </div>
+  )
+
+  const themeOptions = [
+    { id: 'system', label: 'System', icon: Monitor },
+    { id: 'light', label: 'Light', icon: Sun },
+    { id: 'dark', label: 'Dark', icon: Moon },
+  ] as const
+
   return (
     <div className="mx-auto max-w-2xl">
       <MacWindow title="Fatura Flow — Settings">
-        <div className="space-y-6">
-          <div>
-            <p className="text-sm font-medium text-white/80">Data Management</p>
-            <p className="mt-1 text-xs text-white/40">
-              {invoices.length} invoice{invoices.length !== 1 ? 's' : ''} stored in your browser.
+        <div className="space-y-4">
+          {/* Header */}
+          <div className="mb-2">
+            <p className="text-sm font-semibold text-foreground/80">Preferences</p>
+          </div>
+
+          {/* Theme */}
+          <Row
+            title="Appearance"
+            description="Switch between light, dark, or system default"
+            action={
+              <div className="flex items-center rounded-[14px] bg-black/10 dark:bg-black/20 p-1 shadow-inner ring-1 ring-white/10 dark:ring-white/5">
+                {themeOptions.map((opt) => {
+                  const Icon = opt.icon
+                  const isActive = themeState.theme === opt.id
+                  return (
+                    <button
+                      key={opt.id}
+                      onClick={() => themeState.setTheme(opt.id)}
+                      className={[
+                        'relative flex items-center justify-center gap-2 rounded-[10px] px-3.5 py-1.5 text-xs font-medium transition-all duration-300',
+                        isActive 
+                          ? 'bg-white shadow-[0_2px_8px_rgba(0,0,0,0.1)] text-black dark:bg-white/15 dark:text-white dark:shadow-[0_2px_12px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.2)]'
+                          : 'text-slate-500 hover:text-slate-800 dark:text-white/40 dark:hover:text-white/70 hover:bg-white/5',
+                      ].join(' ')}
+                    >
+                      <Icon className="size-3.5" />
+                      {opt.label}
+                    </button>
+                  )
+                })}
+              </div>
+            }
+          />
+
+          <div className="mt-8 mb-2">
+            <p className="text-sm font-semibold text-foreground/80">Data Management</p>
+            <p className="text-xs text-foreground/40 mt-0.5">
+              {invoices.length} invoice{invoices.length !== 1 ? 's' : ''} stored locally in your browser.
             </p>
           </div>
 
-          <div className="flex items-center justify-between rounded-[22px] border border-white/10 bg-white/[0.02] px-4 py-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.15)]">
-            <div>
-              <p className="text-sm text-white/70">Export Data</p>
-              <p className="text-xs text-white/40">Download all invoices as a JSON backup</p>
-            </div>
-            <Button variant="outline" size="sm" onClick={handleExport}>
-              <Download className="size-3.5" />
-              Export
-            </Button>
-          </div>
+          {/* Export */}
+          <Row
+            title="Export Data"
+            description="Download all invoices as a JSON backup file"
+            action={
+              <Button variant="outline" size="sm" onClick={handleExport}>
+                <Download className="size-3.5" />
+                Export
+              </Button>
+            }
+          />
 
-          <div className="flex items-center justify-between rounded-[22px] border border-white/10 bg-white/[0.02] px-4 py-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.15)]">
-            <div>
-              <p className="text-sm text-white/70">Import Data</p>
-              <p className="text-xs text-white/40">Restore invoices from a JSON backup</p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Upload className="size-3.5" />
-              Import
-            </Button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".json"
-              className="hidden"
-              onChange={handleImport}
-            />
-          </div>
+          {/* Import */}
+          <Row
+            title="Import Data"
+            description="Restore invoices from a previously exported JSON backup"
+            action={
+              <>
+                <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+                  <Upload className="size-3.5" />
+                  Import
+                </Button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".json"
+                  className="hidden"
+                  onChange={handleImport}
+                />
+              </>
+            }
+          />
 
-          <div className="mt-6 rounded-[22px] border border-white/10 bg-white/[0.02] px-4 py-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.15)]">
-            <p className="text-sm text-white/70">About</p>
-            <p className="mt-1 text-xs text-white/40">
-              Fatura Flow Local v1.0 &mdash; 100% client-side invoice management.
-              All data stays in your browser.
-            </p>
+          {/* About */}
+          <div className="flex items-start gap-3 rounded-[20px] border border-white/[0.06] bg-white/[0.015] px-5 py-4 mt-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+            <Info className="size-4 text-foreground/30 mt-0.5 shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-foreground/70">About Fatura Flow Local</p>
+              <p className="text-xs text-foreground/40 mt-1 leading-relaxed">
+                Version 1.0 &mdash; 100% client-side invoice management.
+                All data is stored in your browser&apos;s localStorage and never leaves your device.
+              </p>
+            </div>
           </div>
         </div>
       </MacWindow>
@@ -105,13 +167,11 @@ function SettingsView() {
 type View = 'dashboard' | 'invoices' | 'settings'
 
 function App() {
-  const loadInvoices = useInvoiceStore((s) => s.loadInvoices)
-  const currentInvoice = useInvoiceStore((s) => s.currentInvoice)
+  const loadInvoices    = useInvoiceStore((s) => s.loadInvoices)
+  const currentInvoice  = useInvoiceStore((s) => s.currentInvoice)
   const [view, setView] = useState<View>('invoices')
 
-  useEffect(() => {
-    loadInvoices()
-  }, [loadInvoices])
+  useEffect(() => { loadInvoices() }, [loadInvoices])
 
   if (currentInvoice) {
     return (
@@ -124,8 +184,8 @@ function App() {
   return (
     <AppLayout activeNav={view} onNavChange={setView}>
       {view === 'dashboard' && <DashboardView />}
-      {view === 'invoices' && <InvoiceDashboard />}
-      {view === 'settings' && <SettingsView />}
+      {view === 'invoices'  && <InvoiceDashboard />}
+      {view === 'settings'  && <SettingsView />}
     </AppLayout>
   )
 }

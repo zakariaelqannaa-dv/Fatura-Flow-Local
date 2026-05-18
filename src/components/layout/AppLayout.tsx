@@ -19,7 +19,7 @@ export function AppLayout({
         activeNav={activeNav}
         onNavChange={onNavChange ?? (() => {})}
       />
-      <main className="relative z-20 ml-20 min-h-dvh p-4 lg:ml-64 lg:p-8">
+      <main className="relative z-20 ml-20 flex min-h-dvh flex-col p-4 lg:ml-64 lg:p-8">
         {children}
       </main>
     </div>

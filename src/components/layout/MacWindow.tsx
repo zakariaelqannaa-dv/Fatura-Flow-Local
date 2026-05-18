@@ -5,24 +5,39 @@ interface MacWindowProps {
   children: ReactNode
   title?: string
   className?: string
+  stretch?: boolean
 }
 
-export function MacWindow({ children, title, className }: MacWindowProps) {
+export function MacWindow({ children, title, className, stretch }: MacWindowProps) {
   return (
-    <div className={cn('mac-window overflow-hidden', className)}>
-      <div className="mac-window-header flex items-center gap-2 px-4 py-3 select-none">
+    <div
+      className={cn(
+        'mac-window overflow-hidden flex flex-col',
+        stretch && 'flex-1 min-h-0',
+        className,
+      )}
+    >
+      {/* Title bar */}
+      <div className="mac-window-header flex items-center gap-3 px-5 py-3.5 select-none shrink-0">
+        {/* Traffic lights */}
         <div className="flex items-center gap-1.5">
-          <div className="traffic-light size-3 rounded-full bg-red-500/80 shadow-[inset_0_1px_1px_rgba(255,255,255,0.3),0_0_6px_rgba(239,68,68,0.3)] hover:bg-red-400" />
-          <div className="traffic-light size-3 rounded-full bg-yellow-500/80 shadow-[inset_0_1px_1px_rgba(255,255,255,0.3),0_0_6px_rgba(234,179,8,0.3)] hover:bg-yellow-400" />
-          <div className="traffic-light size-3 rounded-full bg-green-500/80 shadow-[inset_0_1px_1px_rgba(255,255,255,0.3),0_0_6px_rgba(34,197,94,0.3)] hover:bg-green-400" />
+          <div className="traffic-light size-3 rounded-full bg-[#ff5f57] shadow-[inset_0_0.5px_1px_rgba(255,255,255,0.35),0_0_8px_rgba(255,95,87,0.4)] hover:brightness-110 cursor-default" />
+          <div className="traffic-light size-3 rounded-full bg-[#febc2e] shadow-[inset_0_0.5px_1px_rgba(255,255,255,0.35),0_0_8px_rgba(254,188,46,0.4)] hover:brightness-110 cursor-default" />
+          <div className="traffic-light size-3 rounded-full bg-[#28c840] shadow-[inset_0_0.5px_1px_rgba(255,255,255,0.35),0_0_8px_rgba(40,200,64,0.4)] hover:brightness-110 cursor-default" />
         </div>
+
+        {/* Centered title */}
         {title && (
-          <span className="absolute left-1/2 -translate-x-1/2 text-xs font-medium text-white/40">
+          <span className="absolute left-1/2 -translate-x-1/2 text-[11px] font-medium text-white/35 tracking-wide pointer-events-none">
             {title}
           </span>
         )}
       </div>
-      <div className="p-5">{children}</div>
+
+      {/* Content */}
+      <div className={cn('p-6 animate-fade-blur-in', stretch && 'flex-1 overflow-y-auto')}>
+        {children}
+      </div>
     </div>
   )
 }

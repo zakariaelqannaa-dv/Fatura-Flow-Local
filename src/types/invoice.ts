@@ -1,5 +1,5 @@
 export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'cancelled'
-export type Currency = 'TRY' | 'USD' | 'EUR' | 'GBP'
+export type Currency = 'MAD' | 'USD' | 'EUR' | 'GBP'
 
 export interface LineItem {
   id: string
@@ -65,6 +65,6 @@ export function createEmptyInvoice(): Invoice {
     client: { name: '' },
     lineItems: [{ id: crypto.randomUUID(), description: '', quantity: 1, unitPrice: 0 }],
     taxRate: 0,
-    currency: 'TRY',
+    currency: 'MAD',
   }
 }

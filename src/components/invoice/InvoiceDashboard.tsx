@@ -1,5 +1,7 @@
 import { useState, useRef, useCallback, useMemo } from 'react'
-import type { InvoiceStatus, Currency } from '@/types/invoice'
+import { flushSync } from 'react-dom'
+import { createRoot } from 'react-dom/client'
+import type { InvoiceStatus, Currency, Invoice } from '@/types/invoice'
 import { calculateTotals } from '@/types/invoice'
 import { useInvoiceStore } from '@/store/useInvoiceStore'
 import { STATUS_OPTIONS } from '@/constants'
@@ -30,20 +32,22 @@ import {
 } from '@/components/ui/dialog'
 import { MacWindow } from '@/components/layout/MacWindow'
 import { StatsCard } from '@/components/invoice/StatsCard'
-import { DollarSign, Receipt, Clock, TrendingUp } from 'lucide-react'
+import { InvoicePreview } from '@/components/invoice/InvoicePreview'
+import { generateInvoicePdf } from '@/lib/pdf'
+import { DollarSign, Receipt, Clock, TrendingUp, Search, FileDown } from 'lucide-react'
 
 type SortField = 'invoiceNumber' | 'client' | 'createdAt' | 'total' | 'status'
 type SortDir = 'asc' | 'desc'
 
 const statusStyles: Record<InvoiceStatus, string> = {
   draft:
-    'bg-yellow-500/10 text-yellow-300 border-yellow-500/20 shadow-[0_0_12px_rgba(234,179,8,0.12)]',
+    'bg-yellow-500/10 text-yellow-300/90 border-yellow-500/20 shadow-[0_0_14px_rgba(234,179,8,0.1)]',
   sent:
-    'bg-blue-500/10 text-blue-300 border-blue-500/20 shadow-[0_0_12px_rgba(59,130,246,0.12)]',
+    'bg-blue-500/10 text-blue-300/90 border-blue-500/20 shadow-[0_0_14px_rgba(59,130,246,0.1)]',
   paid:
-    'bg-green-500/10 text-green-300 border-green-500/20 shadow-[0_0_12px_rgba(34,197,94,0.12)]',
+    'bg-green-500/10 text-green-300/90 border-green-500/20 shadow-[0_0_14px_rgba(34,197,94,0.1)]',
   cancelled:
-    'bg-white/5 text-white/40 border-white/10',
+    'bg-white/[0.04] text-white/35 border-white/10',
 }
 
 function formatDate(iso: string): string {
@@ -60,16 +64,13 @@ function formatDate(iso: string): string {
 
 function formatCurrency(amount: number, currency: Currency): string {
   const symbols: Record<string, string> = {
-    TRY: '₺',
-    USD: '$',
-    EUR: '€',
-    GBP: '£',
+    MAD: 'DH', USD: '$', EUR: '€', GBP: '£',
   }
   return `${symbols[currency] ?? currency} ${amount.toFixed(2)}`
 }
 
 function formatShortCurrency(amount: number, currency: Currency): string {
-  const sym: Record<string, string> = { TRY: '₺', USD: '$', EUR: '€', GBP: '£' }
+  const sym: Record<string, string> = { MAD: 'DH', USD: '$', EUR: '€', GBP: '£' }
   const s = sym[currency] ?? currency
   if (amount >= 1_000_000) return `${s} ${(amount / 1_000_000).toFixed(1)}M`
   if (amount >= 1_000) return `${s} ${(amount / 1_000).toFixed(1)}K`
@@ -77,20 +78,19 @@ function formatShortCurrency(amount: number, currency: Currency): string {
 }
 
 export function InvoiceDashboard() {
-  const invoices = useInvoiceStore((s) => s.invoices)
-  const loadInvoice = useInvoiceStore((s) => s.loadInvoice)
+  const invoices      = useInvoiceStore((s) => s.invoices)
+  const loadInvoice   = useInvoiceStore((s) => s.loadInvoice)
   const createNewInvoice = useInvoiceStore((s) => s.createNewInvoice)
   const deleteInvoice = useInvoiceStore((s) => s.deleteInvoice)
-  const exportData = useInvoiceStore((s) => s.exportData)
-  const importData = useInvoiceStore((s) => s.importData)
+  const importData    = useInvoiceStore((s) => s.importData)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const [search, setSearch] = useState('')
+  const [search, setSearch]           = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
-  const [sortField, setSortField] = useState<SortField>('createdAt')
-  const [sortDir, setSortDir] = useState<SortDir>('desc')
-  const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [sortField, setSortField]     = useState<SortField>('createdAt')
+  const [sortDir, setSortDir]         = useState<SortDir>('desc')
+  const [deleteId, setDeleteId]       = useState<string | null>(null)
 
   const handleSort = useCallback(
     (field: SortField) => {
@@ -104,66 +104,29 @@ export function InvoiceDashboard() {
     [sortField],
   )
 
-  const filtered = useMemo(() => {
-    let list = invoices
-
-    if (statusFilter !== 'all') {
-      list = list.filter((inv) => inv.status === statusFilter)
-    }
-
-    if (search.trim()) {
-      const q = search.toLowerCase()
-      list = list.filter(
-        (inv) =>
-          inv.invoiceNumber.toLowerCase().includes(q) ||
-          inv.client.name.toLowerCase().includes(q),
-      )
-    }
-
-    list = [...list].sort((a, b) => {
-      const dir = sortDir === 'asc' ? 1 : -1
-      if (sortField === 'client') {
-        return a.client.name.localeCompare(b.client.name) * dir
-      }
-      if (sortField === 'total') {
-        const ta = calculateTotals(a.lineItems, a.taxRate).total
-        const tb = calculateTotals(b.lineItems, b.taxRate).total
-        return (ta - tb) * dir
-      }
-      const aVal = a[sortField]
-      const bVal = b[sortField]
-      if (aVal < bVal) return -1 * dir
-      if (aVal > bVal) return 1 * dir
-      return 0
-    })
-
-    return list
-  }, [invoices, search, statusFilter, sortField, sortDir])
-
-  const handleEdit = useCallback(
-    (id: string) => {
-      loadInvoice(id)
-    },
-    [loadInvoice],
-  )
+  const handleEdit = useCallback((id: string) => { loadInvoice(id) }, [loadInvoice])
 
   const handleDeleteConfirm = useCallback(() => {
-    if (deleteId) {
-      deleteInvoice(deleteId)
-      setDeleteId(null)
-    }
+    if (deleteId) { deleteInvoice(deleteId); setDeleteId(null) }
   }, [deleteId, deleteInvoice])
 
-  const handleExport = useCallback(() => {
-    const json = exportData()
-    const blob = new Blob([json], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `fatura-flow-backup-${new Date().toISOString().split('T')[0]}.json`
-    a.click()
-    URL.revokeObjectURL(url)
-  }, [exportData])
+  const handleDownloadPdf = useCallback(async (inv: Invoice) => {
+    const temp = document.createElement('div')
+    temp.style.cssText = 'position:fixed;left:-9999px;top:0;background:#fff;color:#111827;'
+    document.body.appendChild(temp)
+
+    const root = createRoot(temp)
+    flushSync(() => root.render(<InvoicePreview invoice={inv} />))
+
+    try {
+      await generateInvoicePdf(temp, {
+        filename: `${inv.invoiceNumber}.pdf`,
+      })
+    } finally {
+      root.unmount()
+      document.body.removeChild(temp)
+    }
+  }, [])
 
   const handleImport = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -174,9 +137,7 @@ export function InvoiceDashboard() {
         const text = ev.target?.result
         if (typeof text === 'string') {
           const result = importData(text)
-          if (!result.success) {
-            alert(`Import failed: ${result.error ?? 'Unknown error'}`)
-          }
+          if (!result.success) alert(`Import failed: ${result.error ?? 'Unknown error'}`)
         }
       }
       reader.readAsText(file)
@@ -187,168 +148,163 @@ export function InvoiceDashboard() {
 
   const totalRevenue = useMemo(() => {
     let sum = 0
-    for (const inv of invoices) {
-      sum += calculateTotals(inv.lineItems, inv.taxRate).total
-    }
+    for (const inv of invoices) sum += calculateTotals(inv.lineItems, inv.taxRate).total
     return sum
   }, [invoices])
 
   const paidRevenue = useMemo(() => {
     let sum = 0
-    for (const inv of invoices) {
-      if (inv.status === 'paid') {
-        sum += calculateTotals(inv.lineItems, inv.taxRate).total
-      }
-    }
+    for (const inv of invoices)
+      if (inv.status === 'paid') sum += calculateTotals(inv.lineItems, inv.taxRate).total
     return sum
   }, [invoices])
 
-  const draftCount = useMemo(
-    () => invoices.filter((i) => i.status === 'draft').length,
-    [invoices],
-  )
+  const draftCount = useMemo(() => invoices.filter((i) => i.status === 'draft').length, [invoices])
 
-  const primaryCurrency: Currency =
-    invoices.length > 0 ? invoices[0]!.currency : 'TRY'
+  const primaryCurrency: Currency = invoices.length > 0 ? invoices[0]!.currency : 'MAD'
+
+  const SortArrow = ({ field }: { field: SortField }) =>
+    sortField === field ? (
+      <span className="ml-1 text-white/35 text-[10px]">{sortDir === 'asc' ? '▲' : '▼'}</span>
+    ) : null
+
+  const filtered = useMemo(() => {
+    let result = invoices
+
+    if (statusFilter !== 'all') {
+      result = result.filter((i) => i.status === statusFilter)
+    }
+
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      result = result.filter(
+        (i) =>
+          i.invoiceNumber.toLowerCase().includes(q) ||
+          i.client.name.toLowerCase().includes(q) ||
+          i.client.email?.toLowerCase().includes(q)
+      )
+    }
+
+    result = [...result].sort((a, b) => {
+      let valA: any
+      let valB: any
+
+      switch (sortField) {
+        case 'invoiceNumber':
+          valA = a.invoiceNumber
+          valB = b.invoiceNumber
+          break
+        case 'client':
+          valA = a.client.name
+          valB = b.client.name
+          break
+        case 'createdAt':
+          valA = new Date(a.createdAt).getTime()
+          valB = new Date(b.createdAt).getTime()
+          break
+        case 'total':
+          valA = calculateTotals(a.lineItems, a.taxRate).total
+          valB = calculateTotals(b.lineItems, b.taxRate).total
+          break
+        case 'status':
+          valA = a.status
+          valB = b.status
+          break
+      }
+
+      if (valA < valB) return sortDir === 'asc' ? -1 : 1
+      if (valA > valB) return sortDir === 'asc' ? 1 : -1
+      return 0
+    })
+
+    return result
+  }, [invoices, search, statusFilter, sortField, sortDir])
 
   return (
-    <div className="mx-auto max-w-6xl space-y-5">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatsCard
-          icon={DollarSign}
-          label="Total Revenue"
-          value={formatShortCurrency(totalRevenue, primaryCurrency)}
-          accent="blue"
-        />
-        <StatsCard
-          icon={Receipt}
-          label="Total Invoices"
-          value={String(invoices.length)}
-          accent="purple"
-        />
-        <StatsCard
-          icon={TrendingUp}
-          label="Paid"
-          value={formatShortCurrency(paidRevenue, primaryCurrency)}
-          accent="green"
-        />
-        <StatsCard
-          icon={Clock}
-          label="Drafts"
-          value={String(draftCount)}
-          accent="yellow"
-        />
-      </div>
+    <div className="mx-auto flex max-w-6xl flex-1 flex-col">
+      <MacWindow title="Fatura Flow — Invoices" stretch>
+        <div className="flex flex-col gap-6">
 
-      <MacWindow title="Fatura Flow — Invoices">
-        <div className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-3">
-              <Input
-                placeholder="Search by invoice # or client..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="max-w-xs"
-              />
-              <Select value={statusFilter} onValueChange={(val) => val && setStatusFilter(val)}>
-                <SelectTrigger className="w-36">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  {STATUS_OPTIONS.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {s.charAt(0).toUpperCase() + s.slice(1)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={handleExport}>
-                Export
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                Import
-              </Button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".json"
-                className="hidden"
-                onChange={handleImport}
-              />
-              <Button size="sm" onClick={createNewInvoice}>
-                + New Invoice
-              </Button>
-            </div>
+          {/* Stats row */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <StatsCard icon={DollarSign} label="Total Revenue" value={formatShortCurrency(totalRevenue, primaryCurrency)} accent="blue" />
+            <StatsCard icon={Receipt}    label="Total Invoices" value={String(invoices.length)}                             accent="purple" />
+            <StatsCard icon={TrendingUp} label="Paid Revenue"   value={formatShortCurrency(paidRevenue, primaryCurrency)}  accent="green" />
+            <StatsCard icon={Clock}      label="Drafts"          value={String(draftCount)}                                 accent="yellow" />
           </div>
 
-          <p className="text-xs text-white/30">
-            {filtered.length} of {invoices.length} invoice{invoices.length !== 1 ? 's' : ''}
-          </p>
+          <div className="space-y-4">
+            {/* Toolbar */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              {/* Search + filter */}
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Search bar */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-white/30 pointer-events-none" />
+                  <Input
+                    placeholder="Search invoice or client…"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="pl-8 max-w-xs"
+                  />
+                </div>
+                <Select value={statusFilter} onValueChange={(val) => val && setStatusFilter(val)}>
+                  <SelectTrigger className="w-36">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    {STATUS_OPTIONS.map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {s.charAt(0).toUpperCase() + s.slice(1)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-          {filtered.length === 0 ? (
-            <p className="py-12 text-center text-white/40">
-              {invoices.length === 0
-                ? 'No invoices yet. Create your first invoice!'
-                : 'No invoices match your filters.'}
+              {/* Actions */}
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>Import</Button>
+                <input ref={fileInputRef} type="file" accept=".json" className="hidden" onChange={handleImport} />
+                <Button size="sm" onClick={createNewInvoice}>+ New Invoice</Button>
+              </div>
+            </div>
+
+            {/* Count */}
+            <p className="text-[11px] text-white/28 tracking-wide">
+              {filtered.length} of {invoices.length} invoice{invoices.length !== 1 ? 's' : ''}
             </p>
-          ) : (
-            <div className="overflow-hidden rounded-[14px] border border-white/10">
+
+            {/* Table or empty state */}
+            {filtered.length === 0 ? (
+              <div className="rounded-[24px] border border-white/[0.07] bg-white/[0.02] py-16 text-center">
+                <p className="text-sm text-white/35">
+                  {invoices.length === 0
+                    ? 'No invoices yet — create your first one!'
+                    : 'No invoices match your filters.'}
+                </p>
+              </div>
+            ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead
-                      className="cursor-pointer select-none"
-                      onClick={() => handleSort('invoiceNumber')}
-                    >
-                      Invoice #
-                      {sortField === 'invoiceNumber' && (
-                        <span className="ml-1 text-white/40">{sortDir === 'asc' ? '▲' : '▼'}</span>
-                      )}
+                    <TableHead className="cursor-pointer select-none" onClick={() => handleSort('invoiceNumber')}>
+                      Invoice # <SortArrow field="invoiceNumber" />
                     </TableHead>
-                    <TableHead
-                      className="cursor-pointer select-none"
-                      onClick={() => handleSort('client')}
-                    >
-                      Client
-                      {sortField === 'client' && (
-                        <span className="ml-1 text-white/40">{sortDir === 'asc' ? '▲' : '▼'}</span>
-                      )}
+                    <TableHead className="cursor-pointer select-none" onClick={() => handleSort('client')}>
+                      Client <SortArrow field="client" />
                     </TableHead>
-                    <TableHead
-                      className="cursor-pointer select-none"
-                      onClick={() => handleSort('createdAt')}
-                    >
-                      Date
-                      {sortField === 'createdAt' && (
-                        <span className="ml-1 text-white/40">{sortDir === 'asc' ? '▲' : '▼'}</span>
-                      )}
+                    <TableHead className="cursor-pointer select-none" onClick={() => handleSort('createdAt')}>
+                      Date <SortArrow field="createdAt" />
                     </TableHead>
-                    <TableHead
-                      className="cursor-pointer select-none text-right"
-                      onClick={() => handleSort('total')}
-                    >
-                      Total
-                      {sortField === 'total' && (
-                        <span className="ml-1 text-white/40">{sortDir === 'asc' ? '▲' : '▼'}</span>
-                      )}
+                    <TableHead className="cursor-pointer select-none text-right" onClick={() => handleSort('total')}>
+                      Total <SortArrow field="total" />
                     </TableHead>
-                    <TableHead
-                      className="cursor-pointer select-none"
-                      onClick={() => handleSort('status')}
-                    >
-                      Status
-                      {sortField === 'status' && (
-                        <span className="ml-1 text-white/40">{sortDir === 'asc' ? '▲' : '▼'}</span>
-                      )}
+                    <TableHead className="cursor-pointer select-none" onClick={() => handleSort('status')}>
+                      Status <SortArrow field="status" />
                     </TableHead>
-                    <TableHead className="w-24">Actions</TableHead>
+                    <TableHead className="w-36">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -356,39 +312,26 @@ export function InvoiceDashboard() {
                     const totals = calculateTotals(inv.lineItems, inv.taxRate)
                     return (
                       <TableRow key={inv.id}>
-                        <TableCell className="font-medium text-white/85">
-                          {inv.invoiceNumber}
-                        </TableCell>
-                        <TableCell>{inv.client.name || '—'}</TableCell>
-                        <TableCell className="text-white/45">
-                          {formatDate(inv.createdAt)}
-                        </TableCell>
-                        <TableCell className="text-right font-medium text-white/85">
+                        <TableCell className="font-semibold text-white/88">{inv.invoiceNumber}</TableCell>
+                        <TableCell className="text-white/65">{inv.client.name || '—'}</TableCell>
+                        <TableCell className="text-white/40">{formatDate(inv.createdAt)}</TableCell>
+                        <TableCell className="text-right font-semibold text-white/88">
                           {formatCurrency(totals.total, inv.currency)}
                         </TableCell>
                         <TableCell>
                           <span
-                            className={`glass-badge inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${statusStyles[inv.status]}`}
+                            className={`glass-badge inline-block rounded-[10px] px-2.5 py-1 text-[11px] font-medium tracking-wide ${statusStyles[inv.status]}`}
                           >
                             {inv.status.charAt(0).toUpperCase() + inv.status.slice(1)}
                           </span>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1">
-                            <Button
-                              variant="ghost"
-                              size="xs"
-                              onClick={() => handleEdit(inv.id)}
-                            >
-                              Edit
+                            <Button variant="ghost" size="xs" onClick={() => handleDownloadPdf(inv)} title="Download PDF">
+                              <FileDown className="size-3.5" />
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="xs"
-                              onClick={() => setDeleteId(inv.id)}
-                            >
-                              Delete
-                            </Button>
+                            <Button variant="ghost" size="xs" onClick={() => handleEdit(inv.id)}>Edit</Button>
+                            <Button variant="ghost" size="xs" onClick={() => setDeleteId(inv.id)}>Delete</Button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -396,11 +339,12 @@ export function InvoiceDashboard() {
                   })}
                 </TableBody>
               </Table>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </MacWindow>
 
+      {/* Delete confirm modal */}
       <Dialog open={deleteId !== null} onOpenChange={(open) => !open && setDeleteId(null)}>
         <DialogContent>
           <DialogHeader>
@@ -410,12 +354,8 @@ export function InvoiceDashboard() {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteId(null)}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={handleDeleteConfirm}>
-              Delete
-            </Button>
+            <Button variant="outline" onClick={() => setDeleteId(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDeleteConfirm}>Delete</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
