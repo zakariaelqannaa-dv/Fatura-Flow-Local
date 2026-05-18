@@ -6,50 +6,64 @@ export interface PdfOptions {
 }
 
 /**
- * Walk all descendants and force-inline any CSS color value that html2canvas
- * cannot parse (oklab, oklch, color-mix with oklab/oklch, color(), etc.)
- * so the snapshot renders safely.
+ * Pattern matching all CSS color functions that html2canvas cannot parse.
+ * These include:
+ *   - oklab(), oklch(), lab(), lch(), color()
+ *   - color-mix(in oklab, ...) and color-mix(in oklch, ...)
  */
-function sanitizeForPdf(root: HTMLElement): void {
-  const UNSAFE_COLOR_PATTERN =
-    /\b(oklab|oklch|color\(|lab\(|lch\()|color-mix\s*\(\s*in\s+(oklab|oklch)\s*,/i
+const UNSAFE_COLOR_RE =
+  /\b(oklab|oklch|color\(|lab\(|lch\()|color-mix\s*\(\s*in\s+(oklab|oklch)\s*,/i
 
-  const FALLBACKS: Record<string, string> = {
-    'color': '#111827',
-    'background-color': 'transparent',
-    'border-top-color': '#e5e7eb',
-    'border-right-color': '#e5e7eb',
-    'border-bottom-color': '#e5e7eb',
-    'border-left-color': '#e5e7eb',
-    'outline-color': 'transparent',
-    'text-decoration-color': '#111827',
-    'column-rule-color': '#e5e7eb',
-  }
+const COLOR_PROPERTIES = [
+  'color',
+  'background-color',
+  'border-top-color',
+  'border-right-color',
+  'border-bottom-color',
+  'border-left-color',
+  'outline-color',
+  'text-decoration-color',
+  'column-rule-color',
+] as const
 
+/**
+ * Inject a <style> reset into the element that overrides Tailwind's global
+ * `* { @apply border-white/10 outline-white/20 }` rule (which produces
+ * `color-mix(in oklab, ...)` values).  Inline styles from InvoicePreview
+ * take precedence because they have higher specificity than `*`.
+ */
+function injectSafeStylesheet(root: HTMLElement): void {
+  const style = document.createElement('style')
+  style.textContent = [
+    '* {',
+    '  color: #111827;',
+    '  background-color: transparent;',
+    '  border-top-color: #e5e7eb;',
+    '  border-right-color: #e5e7eb;',
+    '  border-bottom-color: #e5e7eb;',
+    '  border-left-color: #e5e7eb;',
+    '  outline-color: transparent;',
+    '  text-decoration-color: #111827;',
+    '  column-rule-color: #e5e7eb;',
+    '}',
+  ].join('\n')
+  root.insertBefore(style, root.firstChild)
+}
+
+/**
+ * Walk every descendant and force-inline any colour value that the regex
+ * flags.  This catches cases where the browser computed-style still exposes
+ * an unresolved value (e.g. in older browser versions).
+ */
+function sanitizeComputedStyles(root: HTMLElement): void {
   function check(el: HTMLElement) {
-    const props = Object.keys(FALLBACKS) as Array<keyof typeof FALLBACKS>
-
-    // 1. Check inline styles first (fast path for elements with explicit styles)
-    for (const prop of props) {
-      const inlineVal = el.style.getPropertyValue(prop)
-      const fallback = FALLBACKS[prop]!
-      if (inlineVal && UNSAFE_COLOR_PATTERN.test(inlineVal)) {
-        el.style.setProperty(prop, fallback, 'important')
-      }
-    }
-
-    // 2. Check computed styles (catches inherited values from Tailwind's
-    //    `@supports (color: color-mix(in lab, red, red))` blocks)
     const cs = getComputedStyle(el)
-    for (const prop of props) {
+    for (const prop of COLOR_PROPERTIES) {
       const val = cs.getPropertyValue(prop)
-      const fallback = FALLBACKS[prop]!
-      if (UNSAFE_COLOR_PATTERN.test(val)) {
-        el.style.setProperty(prop, fallback, 'important')
+      if (UNSAFE_COLOR_RE.test(val)) {
+        el.style.setProperty(prop, '#111827', 'important')
       }
     }
-
-    // Walk shadow roots & children
     if (el.shadowRoot) {
       el.shadowRoot.querySelectorAll('*').forEach((child) => {
         check(child as HTMLElement)
@@ -59,7 +73,6 @@ function sanitizeForPdf(root: HTMLElement): void {
       check(el.children[i] as HTMLElement)
     }
   }
-
   check(root)
 }
 
@@ -79,8 +92,13 @@ export async function generateInvoicePdf(
   element.style.setProperty('box-sizing', 'border-box', 'important')
   element.style.setProperty('overflow', 'hidden', 'important')
 
-  // ── Strip any unsupported colour functions ────────────────
-  sanitizeForPdf(element)
+  // ── Inject safe CSS cascade reset ───────────────────────────
+  // Neutralises Tailwind's `* { border-color: color-mix(in oklab, …) }`
+  // without touching InvoicePreview's explicit inline styles.
+  injectSafeStylesheet(element)
+
+  // ── Sanitise computed styles (belt-and-suspenders) ──────────
+  sanitizeComputedStyles(element)
 
   // ── Generate PDF ──────────────────────────────────────────
   await html2pdf()
