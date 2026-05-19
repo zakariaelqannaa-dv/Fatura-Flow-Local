@@ -7,6 +7,7 @@ import { DashboardView } from '@/components/invoice/DashboardView'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { MacWindow } from '@/components/layout/MacWindow'
 import { Button } from '@/components/ui/button'
+import { CURRENCY_OPTIONS } from '@/constants'
 import { Download, Upload, Info, Moon, Sun, Monitor } from 'lucide-react'
 
 function SettingsView() {
@@ -100,6 +101,33 @@ function SettingsView() {
                     >
                       <Icon className="size-3.5" />
                       {opt.label}
+                    </button>
+                  )
+                })}
+              </div>
+            }
+          />
+
+          {/* Currency */}
+          <Row
+            title="Currency"
+            description="Display currency for dashboard revenue stats"
+            action={
+              <div className="flex items-center rounded-[14px] bg-black/10 dark:bg-black/20 p-1 shadow-inner ring-1 ring-white/10 dark:ring-white/5">
+                {CURRENCY_OPTIONS.map((c) => {
+                  const isActive = themeState.displayCurrency === c
+                  return (
+                    <button
+                      key={c}
+                      onClick={() => themeState.setDisplayCurrency(c)}
+                      className={[
+                        'relative flex items-center justify-center gap-2 rounded-[10px] px-3.5 py-1.5 text-xs font-medium transition-all duration-300',
+                        isActive 
+                          ? 'bg-white shadow-[0_2px_8px_rgba(0,0,0,0.1)] text-black dark:bg-white/15 dark:text-white dark:shadow-[0_2px_12px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.2)]'
+                          : 'text-slate-500 hover:text-slate-800 dark:text-white/40 dark:hover:text-white/70 hover:bg-white/5',
+                      ].join(' ')}
+                    >
+                      {c}
                     </button>
                   )
                 })}

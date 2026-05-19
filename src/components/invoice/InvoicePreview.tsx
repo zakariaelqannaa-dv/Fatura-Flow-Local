@@ -28,11 +28,12 @@ export function InvoicePreview({ invoice }: { invoice: Invoice }) {
       style={{
         background: '#ffffff',
         color: '#111827',
-        padding: '48px',
+        padding: '56px 64px',
         fontFamily: "'Inter', 'Geist', system-ui, sans-serif",
-        minWidth: '640px',
-        borderRadius: '16px',
-        boxShadow: '0 4px 32px rgba(0,0,0,0.08)',
+        width: '794px',
+        minHeight: '1123px',
+        borderRadius: '4px',
+        boxShadow: '0 2px 24px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05)',
       }}
     >
       {/* Header */}

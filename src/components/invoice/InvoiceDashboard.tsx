@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client'
 import type { InvoiceStatus, Currency, Invoice } from '@/types/invoice'
 import { calculateTotals } from '@/types/invoice'
 import { useInvoiceStore } from '@/store/useInvoiceStore'
+import { useThemeStore } from '@/store/useThemeStore'
 import { STATUS_OPTIONS } from '@/constants'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -112,11 +113,15 @@ export function InvoiceDashboard() {
 
   const handleDownloadPdf = useCallback(async (inv: Invoice) => {
     const temp = document.createElement('div')
-    temp.style.cssText = 'position:fixed;left:-9999px;top:0;background:#fff;color:#111827;'
+    temp.style.position = 'fixed'
+    temp.style.left = '-9999px'
+    temp.style.top = '0'
     document.body.appendChild(temp)
 
     const root = createRoot(temp)
     flushSync(() => root.render(<InvoicePreview invoice={inv} />))
+
+    await new Promise((resolve) => setTimeout(resolve, 150))
 
     try {
       await generateInvoicePdf(temp, {
@@ -146,6 +151,8 @@ export function InvoiceDashboard() {
     [importData],
   )
 
+  const primaryCurrency = useThemeStore((s) => s.displayCurrency)
+
   const totalRevenue = useMemo(() => {
     let sum = 0
     for (const inv of invoices) sum += calculateTotals(inv.lineItems, inv.taxRate).total
@@ -160,8 +167,6 @@ export function InvoiceDashboard() {
   }, [invoices])
 
   const draftCount = useMemo(() => invoices.filter((i) => i.status === 'draft').length, [invoices])
-
-  const primaryCurrency: Currency = invoices.length > 0 ? invoices[0]!.currency : 'MAD'
 
   const SortArrow = ({ field }: { field: SortField }) =>
     sortField === field ? (

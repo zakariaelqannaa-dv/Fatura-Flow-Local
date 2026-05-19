@@ -43,6 +43,7 @@ const buttonVariants = cva(
         ghost: [
           "text-foreground/70 border-transparent",
           "hover:bg-foreground/[0.055] hover:text-foreground",
+          "active:bg-foreground/[0.1] dark:active:bg-white/[0.15]",
         ],
         destructive: [
           "bg-destructive text-destructive-foreground border-destructive/30",

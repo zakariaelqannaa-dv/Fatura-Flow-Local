@@ -120,7 +120,7 @@ This provides highly reactive, automatic visual inversions across the entire app
 
 <div align="center">
   <br />
-  <h3><b>Zakaria El Qannaa</b> (<code>zakariaelqannaa-dv</code>)</h3>
+  <h3><b>Zakariaelqannaa-dv</b> (<code>zakariaelqannaa-dv</code>)</h3>
   <p><i>Crafting premium, high-fidelity, local-first web applications using state-of-the-art technologies.</i></p>
   
   <p>

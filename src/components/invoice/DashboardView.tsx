@@ -1,6 +1,7 @@
 import { useMemo, useRef, useCallback } from 'react'
 import { DollarSign, Receipt, TrendingUp, Clock, FileText, Download, Upload } from 'lucide-react'
 import { useInvoiceStore } from '@/store/useInvoiceStore'
+import { useThemeStore } from '@/store/useThemeStore'
 import { calculateTotals } from '@/types/invoice'
 import type { Currency } from '@/types/invoice'
 import { MacWindow } from '@/components/layout/MacWindow'
@@ -23,11 +24,12 @@ const statusColors: Record<string, string> = {
 }
 
 export function DashboardView() {
-  const invoices         = useInvoiceStore((s) => s.invoices)
-  const createNewInvoice = useInvoiceStore((s) => s.createNewInvoice)
-  const exportData       = useInvoiceStore((s) => s.exportData)
-  const importData       = useInvoiceStore((s) => s.importData)
-  const loadInvoice      = useInvoiceStore((s) => s.loadInvoice)
+  const invoices          = useInvoiceStore((s) => s.invoices)
+  const createNewInvoice  = useInvoiceStore((s) => s.createNewInvoice)
+  const exportData        = useInvoiceStore((s) => s.exportData)
+  const importData        = useInvoiceStore((s) => s.importData)
+  const loadInvoice       = useInvoiceStore((s) => s.loadInvoice)
+  const primaryCurrency   = useThemeStore((s) => s.displayCurrency)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -45,8 +47,6 @@ export function DashboardView() {
   }, [invoices])
 
   const draftCount = useMemo(() => invoices.filter((i) => i.status === 'draft').length, [invoices])
-
-  const primaryCurrency: Currency = invoices.length > 0 ? invoices[0]!.currency : 'MAD'
 
   const latestInvoices = useMemo(
     () =>

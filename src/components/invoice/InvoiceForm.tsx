@@ -1,4 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
+import { createRoot } from 'react-dom/client'
 import type { Invoice, LineItem } from '@/types/invoice'
 import { calculateTotals } from '@/types/invoice'
 import { useInvoiceStore } from '@/store/useInvoiceStore'
@@ -162,29 +164,35 @@ export function InvoiceForm() {
   const handleCancel = useCallback(() => { setCurrentInvoice(null) }, [setCurrentInvoice])
 
   const handleDownloadPdf = useCallback(async () => {
-    if (!pdfPreviewRef.current) return
+    if (!currentInvoice) return
 
-    // Capture from a detached clone to avoid Tailwind v4 oklab color values
-    // in the dialog's CSS cascade (html2canvas does not support oklab/oklch).
-    const clone = document.createElement('div')
-    clone.style.cssText =
-      'position:fixed;left:-9999px;top:0;background:#fff;color:#111827;' +
-      "font-family:'Inter','Geist',system-ui,sans-serif;"
-    clone.innerHTML = pdfPreviewRef.current.innerHTML
-    document.body.appendChild(clone)
+    const temp = document.createElement('div')
+    temp.style.position = 'fixed'
+    temp.style.left = '-9999px'
+    temp.style.top = '0'
+    document.body.appendChild(temp)
+
+    const root = createRoot(temp)
+    flushSync(() => root.render(<InvoicePreview invoice={currentInvoice} />))
+
+    await new Promise((resolve) => setTimeout(resolve, 150))
 
     try {
-      await generateInvoicePdf(clone, {
+      await generateInvoicePdf(temp, {
         filename: `${currentInvoice.invoiceNumber || 'invoice'}.pdf`,
       })
     } finally {
-      document.body.removeChild(clone)
+      root.unmount()
+      document.body.removeChild(temp)
     }
-  }, [currentInvoice.invoiceNumber])
+  }, [currentInvoice])
 
   return (
     <div className="mx-auto max-w-4xl">
-      <MacWindow title={`Fatura Flow — ${currentInvoice.invoiceNumber || 'New Invoice'}`}>
+      <MacWindow 
+        title={`Fatura Flow — ${currentInvoice.invoiceNumber || 'New Invoice'}`}
+        onClose={handleCancel}
+      >
         <div className="space-y-5">
 
           {/* ── Invoice Details ── */}
@@ -385,15 +393,17 @@ export function InvoiceForm() {
 
       {/* PDF Preview Dialog */}
       <Dialog open={showPdfPreview} onOpenChange={setShowPdfPreview}>
-        <DialogContent className="max-w-5xl w-[90vw] max-h-[95vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="!max-w-[95vw] !w-[95vw] !max-h-[95vh] !h-[95vh] overflow-hidden !flex !flex-col !p-0">
+          <DialogHeader className="px-6 pt-5 pb-0 shrink-0">
             <DialogTitle>Invoice Preview</DialogTitle>
             <DialogDescription>Preview your invoice before downloading.</DialogDescription>
           </DialogHeader>
-          <div ref={pdfPreviewRef}>
-            <InvoicePreview invoice={currentInvoice} />
+          <div className="flex-1 overflow-y-auto px-6 py-4 flex justify-center items-start">
+            <div ref={pdfPreviewRef} className="shadow-2xl">
+              <InvoicePreview invoice={currentInvoice} />
+            </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="!mx-0 !mb-0 shrink-0">
             <Button variant="outline" onClick={() => setShowPdfPreview(false)}>Close</Button>
             <Button onClick={handleDownloadPdf}>Download PDF</Button>
           </DialogFooter>

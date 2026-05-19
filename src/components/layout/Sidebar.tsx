@@ -20,7 +20,7 @@ interface SidebarProps {
 
 export function Sidebar({ activeNav, onNavChange }: SidebarProps) {
   return (
-    <aside className="glass-panel fixed left-0 top-0 z-10 flex h-dvh w-20 flex-col items-center border-r py-6 lg:w-64 lg:items-stretch lg:px-4">
+    <aside className="glass-panel fixed left-0 top-0 z-10 flex w-20 flex-col items-center border-r py-6 lg:w-64 lg:items-stretch lg:px-4 rounded-r-[32px]">
       {/* Logo */}
       <div className="mb-8 flex items-center justify-center gap-3 lg:justify-start lg:px-2">
         <img
@@ -66,8 +66,6 @@ export function Sidebar({ activeNav, onNavChange }: SidebarProps) {
           )
         })}
       </nav>
-
-      <div className="mt-auto" />
     </aside>
   )
 }
