@@ -2,7 +2,8 @@ node_modules/
 .next/
 dist/
 build/
-.env*.local
-*.log
+.env.local
+.log
 .gitignore
-*.env
+.env
+vite.config.ts
