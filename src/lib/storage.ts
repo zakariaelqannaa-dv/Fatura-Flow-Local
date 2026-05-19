@@ -71,6 +71,28 @@ export interface ImportResult {
   error?: string
 }
 
+const REQUIRED_INVOICE_FIELDS: (keyof Invoice)[] = [
+  'id', 'invoiceNumber', 'status', 'createdAt', 'client', 'lineItems', 'taxRate', 'currency',
+]
+const VALID_STATUSES = ['draft', 'sent', 'paid', 'cancelled']
+
+function isValidInvoice(obj: unknown): obj is Invoice {
+  if (!obj || typeof obj !== 'object') return false
+  const record = obj as Record<string, unknown>
+  for (const field of REQUIRED_INVOICE_FIELDS) {
+    if (record[field] === undefined || record[field] === null) return false
+  }
+  if (typeof record.id !== 'string') return false
+  if (typeof record.invoiceNumber !== 'string') return false
+  if (!VALID_STATUSES.includes(record.status as string)) return false
+  if (typeof record.client !== 'object' || !record.client || typeof (record.client as Record<string, unknown>).name !== 'string') return false
+  if (!Array.isArray(record.lineItems)) return false
+  if (typeof record.taxRate !== 'number') return false
+  if (typeof record.createdAt !== 'string') return false
+  if (typeof record.currency !== 'string') return false
+  return true
+}
+
 export function importData(json: string): ImportResult {
   try {
     const parsed = JSON.parse(json)
@@ -95,6 +117,12 @@ export function importData(json: string): ImportResult {
 
     if (!Array.isArray(invoices)) {
       return { success: false, count: 0, error: 'Invoice data must be an array' }
+    }
+
+    for (let i = 0; i < invoices.length; i++) {
+      if (!isValidInvoice(invoices[i])) {
+        return { success: false, count: 0, error: `Invoice at index ${i} is missing required fields or has invalid data` }
+      }
     }
 
     for (const key of Object.values(STORAGE_KEYS)) {
